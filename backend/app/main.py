@@ -63,7 +63,7 @@ async def cabeceras_seguridad(request: Request, call_next):
     resp = await call_next(request)
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
-    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     # Detrás de Render (o de cualquier proxy) el HTTPS se detecta por X-Forwarded-Proto
     if request.headers.get("x-forwarded-proto", request.url.scheme) == "https":
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

@@ -1,0 +1,39 @@
+# Blueprint de Render (plan GRATUITO): un servicio web (API + página) y una base de datos PostgreSQL.
+# Uso: suba el proyecto a GitHub → Render → New → Blueprint → seleccione el repositorio.
+services:
+  - type: web
+    name: movilidad-pradilla
+    runtime: docker
+    plan: free
+    region: virginia            # debe coincidir con la región de la base de datos
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL       # conexión interna a la base de datos de abajo
+        fromDatabase:
+          name: pradilla-db
+          property: connectionString
+      - key: REPORT_SALT        # sal secreta para limitar spam sin guardar IP (la genera Render)
+        generateValue: true
+      - key: SEED_DEMO_DATA
+        value: "1"
+      - key: CONFIRMACIONES_PARA_VALIDAR
+        value: "2"              # ponga 1 para demostrar la validación en clase con un solo dispositivo extra
+      # Datos que la web muestra en Info → Entorno de publicación
+      - key: HOSTING_PROVIDER
+        value: Render
+      - key: HOSTING_TYPE
+        value: PaaS (plan gratuito)
+      - key: HOSTING_REGION
+        value: Virginia, EE. UU.
+      - key: TLS_GESTIONADO_POR
+        value: Render
+
+databases:
+  - name: pradilla-db
+    plan: free                  # gratis: 1 GB, expira a los 30 días de su creación
+    region: virginia
+    databaseName: pradilla
+    user: pradilla
+    ipAllowList: []             # sin acceso desde Internet: solo el servicio web se conecta

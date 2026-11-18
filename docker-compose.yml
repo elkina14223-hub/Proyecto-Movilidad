@@ -1,0 +1,89 @@
+# Desarrollo local:   ./scripts/gen-dev-cert.sh && docker compose up --build   (https://localhost:8443)
+# Producción:         ver docs/DESPLIEGUE.md  (./scripts/init-letsencrypt.sh la primera vez)
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pradilla
+      POSTGRES_USER: pradilla
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pradilla -d pradilla"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://pradilla:${POSTGRES_PASSWORD}@db:5432/pradilla
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-1}
+      REPORT_SALT: ${REPORT_SALT:?defina REPORT_SALT en .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://localhost:8443}
+      # Se muestran en la sección «Entorno de publicación» de la web
+      HOSTING_PROVIDER: ${HOSTING_PROVIDER:-}
+      HOSTING_REGION: ${HOSTING_REGION:-}
+      HOSTING_TYPE: ${HOSTING_TYPE:-}
+      CERT_FILE: ${SSL_CERT_PATH:-/etc/nginx/certs/fullchain.pem}
+      # Mensajería (todo opcional; sin configurar, la función simplemente no envía)
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ALERT_EMAILS: ${ALERT_EMAILS:-}
+      CONFIRMACIONES_PARA_VALIDAR: ${CONFIRMACIONES_PARA_VALIDAR:-2}
+    volumes:
+      # Solo lectura: la API lee el certificado público para mostrar su vigencia
+      - ./certs:/etc/nginx/certs:ro
+      - certbot-etc:/etc/letsencrypt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_MAPTILER_KEY: ${VITE_MAPTILER_KEY:-}
+    restart: unless-stopped
+    environment:
+      # Sufijo del puerto HTTPS público para la redirección 301 (vacío en producción con 443)
+      PUBLIC_HTTPS_SUFFIX: ${PUBLIC_HTTPS_SUFFIX-:8443}
+      SSL_CERT_PATH: ${SSL_CERT_PATH:-/etc/nginx/certs/fullchain.pem}
+      SSL_KEY_PATH: ${SSL_KEY_PATH:-/etc/nginx/certs/privkey.pem}
+    # Recarga nginx cada 6 h para tomar el certificado renovado por certbot
+    command: >
+      /bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g "daemon off;"'
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    depends_on:
+      - api
+
+  # Renovación automática del certificado (Let's Encrypt, 90 días): solo se usa con --profile produccion
+  certbot:
+    image: certbot/certbot
+    profiles: ["produccion"]
+    restart: unless-stopped
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+
+volumes:
+  dbdata:
+  certbot-etc:
+  certbot-www:

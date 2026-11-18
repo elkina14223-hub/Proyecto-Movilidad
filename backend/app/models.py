@@ -45,7 +45,7 @@ class RegistroTrafico(Base):
     muestras: Mapped[int] = mapped_column(Integer, default=1)  # nº de mediciones agregadas
     desviacion: Mapped[float] = mapped_column(Float, default=0.0)  # variabilidad entre mediciones
     fuente: Mapped[str] = mapped_column(String(80))
-    periodo: Mapped[str] = mapped_column(String(40))
+    periodo: Mapped[str] = mapped_column(String(120))
 
     tramo = relationship("Tramo", back_populates="historico")
 
